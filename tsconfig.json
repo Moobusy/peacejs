@@ -1,0 +1,33 @@
+{
+    "compilerOptions": {
+        "target": "ES6",
+        "module": "commonjs",
+        "noEmitOnError": true,
+        "experimentalDecorators": true,
+        "outDir": "./build/",
+        "baseUrl": ".",
+        "declaration": true,
+        "paths": {
+            "~core/*": [
+                "./core/*"
+            ],
+            "~app/*": [
+                "./app/*"
+            ]
+        },
+        "types": [
+            "node"
+        ]
+    },
+    // "moduleResolution": "node",
+    "lib": [
+        "esnext",
+        "esnext.asynciterable"
+    ],
+    "compileOnSave": true,
+    "exclude": [
+        "dist",
+        "build",
+        "node_modules*"
+    ]
+}
