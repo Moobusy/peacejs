@@ -1,8 +1,8 @@
-export interface App {
-    auth: Auth
-}
-
-export interface Auth {
+export type Auth = {
     nodes: string[]
     group: string
+}
+
+export type App = {
+    auth: Auth
 }

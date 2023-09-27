@@ -9,7 +9,7 @@ export class Context {
     constructor(uri, req) {
         this.uri = uri;
         this.req = req;
-        this.params = new URLSearchParams(this.uri === this.req.url ? '' : this.req.url.substr(this.uri.length + 1));
+        this.params = new URLSearchParams(this.uri === this.req.url ? '' : this.req.url.substring(this.uri.length + 1));
     }
 }
 

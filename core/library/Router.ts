@@ -3,27 +3,30 @@ import { readdirSync, createReadStream, createWriteStream } from "fs";
 import * as path from "path";
 import { BaseController } from "~core/controller/BaseController";
 import { ServerResponse, OutgoingHttpHeaders, IncomingMessage } from "http";
-import { createGzip, createDeflate, Gzip } from "zlib";
-import { Duplex, Readable, pipeline, Transform, PassThrough } from "stream";
+import { createGzip, createDeflate } from "zlib";
+import { PassThrough } from "stream";
 
-interface ControllerMap extends NodeJS.Dict<typeof BaseController> {
+type ControllerMap = {
+    [key: string]: typeof BaseController
 }
-
-interface TmpRoute {
+type TmpRoute = {
     path: string
     actions: NodeJS.Dict<string>
 }
-interface TmpRouteMap extends NodeJS.Dict<TmpRoute> { }
+type TmpRouteMap = {
+    [key: string]: TmpRoute
+}
 
-interface Route {
+type Route = {
     controller: typeof BaseController
     action: string
     redirect?: string
 }
-interface RouteMap extends NodeJS.Dict<Route> { }
-
+type RouteMap = {
+    [key: string]: Route
+}
 export class Router {
-    static router: Router
+    static router: InstanceType<typeof Router>
     controllerMap: ControllerMap = {}
     _tmpRouters: TmpRouteMap = {}
     routers: RouteMap = {}
@@ -82,45 +85,52 @@ export class Router {
         // console.log(this.routers)
     }
     async exec(req: IncomingMessage, res: ServerResponse, uri: string, headers: OutgoingHttpHeaders) {
-        if (this.routers[uri]) {
+        if (this.routers.hasOwnProperty(uri)) {
             const route = this.routers[uri];
             const controller = new route['controller'](uri, req);
-            let resp = await controller[route['action']].apply(controller);
-            if (resp === null || resp === undefined) {
-                resp = ""
-            }
+            let response = await controller[route['action']].apply(controller);
+            this.writeResponse(response, req, res, headers);
+        } else {
+            this.writeResponse("", req, res, headers, 404);
+        }
+    }
 
-            if (typeof resp === "object") {
-                resp = JSON.stringify(resp);
-                headers['Content-Type'] = "application/json;charset=utf-8";
-            } else {
-                headers['Content-Type'] = "text/html; charset=utf-8";
-            }
-            const buffer = Buffer.from(resp, "utf-8")
-            headers['Content-Length'] = buffer.length;
+    writeResponse(response: String | null | Object, req: IncomingMessage, res: ServerResponse, headers: OutgoingHttpHeaders, status: number = 200) {
+        let resp = "";
+        if (typeof response === "object") {
+            resp = JSON.stringify(response);
+            headers['Content-Type'] = "application/json;charset=utf-8";
+        } else {
+            resp = response || "";
+            headers['Content-Type'] = "text/html; charset=utf-8";
+        }
+        const buffer = Buffer.from(resp, "utf-8")
+        headers['Content-Length'] = buffer.length;
 
-            // res.end(resp)
+        let encoding = req.headers["accept-encoding"];
+        if (typeof encoding === "object") {
+            encoding = encoding[0]
+        }
 
-            let encoding = req.headers["accept-encoding"];
-            if (typeof encoding === "object") {
-                encoding = encoding[0]
-            }
-
-            const transForm = new PassThrough();
-            transForm.end(buffer);
-            if (encoding.match(/\bgzip\b/)) {
-                headers['Content-Encoding'] = "gzip";
-                delete headers['Content-Length'];
-                res.writeHead(200, headers);
-                transForm.pipe(createGzip()).pipe(res);
-            } else if (encoding.match(/\bdeflate\b/)) {
-                headers['Content-Encoding'] = "deflate";
-                delete headers['Content-Length'];
-                res.writeHead(200, headers);
-                transForm.pipe(createDeflate()).pipe(res);
-            } else {
-                transForm.pipe(res);
-            }
+        const transForm = new PassThrough();
+        transForm.end(buffer);
+        if (encoding.includes("gzip") && buffer.length > 512) {
+            headers['Content-Encoding'] = "gzip";
+            delete headers['Content-Length'];
+            res.writeHead(status, headers);
+            transForm.pipe(createGzip({
+                level: 3
+            })).pipe(res);
+        } else if (encoding.includes("deflate") && buffer.length > 512) {
+            headers['Content-Encoding'] = "deflate";
+            delete headers['Content-Length'];
+            res.writeHead(status, headers);
+            transForm.pipe(createDeflate({
+                level: 3
+            })).pipe(res);
+        } else {
+            res.writeHead(status, headers);
+            transForm.pipe(res);
         }
     }
 }

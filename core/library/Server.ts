@@ -3,35 +3,24 @@ import { colorConsole, Color } from '../util/console'
 import { Asset } from "./Asset"
 import { Router } from "./Router";
 
-// // 引入所有controller
-
-
-// // 创建服务
-// // 收集路由
-// // 监听端口
-
-
-// const server = http.createServer((req, res) => {
-//     res.end("hello world");
-// });
-
-// server.listen(5568, "127.0.0.1", () => {
-//     console.log("server is running on ", 5568, "127.0.0.1")
-// });
-
 export class Server {
+    static instance: InstanceType<typeof Server>
+    server: HttpServer
     port: number
     hostname: string
-    server: HttpServer
     router: Router
 
-    constructor(port, hostname = "0.0.0.0") {
+    static start() {
+        if (!Server.instance) {
+            Server.instance = new Server();
+        }
+        Server.instance.doListen();
+    }
+
+    constructor(port = 5568, hostname = "0.0.0.0") {
         this.port = port;
         this.hostname = hostname;
         this.router = Router.getInstance();
-        this.server = createServer((req: IncomingMessage, res: ServerResponse) => {
-            this.onRequest(req, res)
-        });
     }
 
     generateHeaders() {
@@ -46,15 +35,29 @@ export class Server {
             req.connection.remoteAddress;
     };
 
-    start() {
-        this.doListen();
+    getParamsFromArgs(): { [key: string]: string } {
+        let params: { [key: string]: string } = {};
+        let args = process.argv.slice(2);
+        args.forEach(arg => {
+            let [key, value] = arg.split('=');
+            params[key] = value;
+        })
+        return params
     }
-
     protected doListen() {
+        let params = this.getParamsFromArgs();
+        if (params.hasOwnProperty('port')) {
+            this.port = parseInt(params.port);
+        }
+        if (params.hasOwnProperty('hostname')) {
+            this.hostname = params.hostname;
+        }
+
+        this.server = createServer((req: IncomingMessage, res: ServerResponse) => this.onRequest(req, res))
         this.server.listen(this.port, this.hostname, () => {
-            const hostname = this.hostname === '0.0.0.0' ? '127.0.0.1' : this.hostname
-            const url = `http://${hostname}:${this.port}`;
-            const output = `██   server is running on ${colorConsole(Color.red, url)}   ██`;
+            let hostname = this.hostname === '0.0.0.0' ? '127.0.0.1' : this.hostname
+            let url = `http://${hostname}:${this.port}`;
+            let output = `██   server is running on ${colorConsole(Color.red, url)}   ██`;
             console.log('')
             console.log(Array.from(new Array(`server is running on ${url}`.length + 10)).map(() => "█").join(''))
             console.log('██' + Array.from(new Array(`server is running on ${url}`.length + 6)).map(() => " ").join('') + '██')
@@ -62,27 +65,28 @@ export class Server {
             console.log('██' + Array.from(new Array(`server is running on ${url}`.length + 6)).map(() => " ").join('') + '██')
             console.log(Array.from(new Array(`server is running on ${url}`.length + 10)).map(() => "█").join(''))
             console.log('')
-        });
+        })
     }
 
     onRequest(req: IncomingMessage, res: ServerResponse) {
-        const uri = req.url.indexOf('?') > -1 ? req.url.substr(0, req.url.indexOf('?')) : req.url;
-        const headers = this.generateHeaders();
-        const startTime = new Date().getTime()
-        if (uri.startsWith('/assets/')) {
+        let uri = req.url.indexOf('?') > -1 ? req.url.substr(0, req.url.indexOf('?')) : req.url;
+        let headers = this.generateHeaders();
+        let startDate = new Date();
+        let startTime = startDate.getTime()
+        if (uri.startsWith('/assets/') || uri.startsWith('/favicon.ico')) {
             Asset.getInstance().exec(res, uri, headers);
         } else {
             Router.getInstance().exec(req, res, uri, headers);
         }
         res.on("finish", () => {
             console.log([
-                `[${new Date().toUTCString()}]`,
-                colorConsole(Color.red, uri),
+                `[${startDate.toUTCString()}]`,
+                uri,
                 `${new Date().getTime() - startTime}ms`,
                 this.getClientIP(req),
                 req.headers["user-agent"],
                 req.headers.referer || "No Referer"
-            ].join(" █ "))
+            ].join("\t"))
         })
     }
 }
